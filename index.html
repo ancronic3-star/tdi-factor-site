@@ -1,0 +1,46 @@
+# TDI Factor Preview Site
+
+This is a clean local rebuild of the website preview.
+
+## What is included
+- secure login / entry page
+- scanner-first dashboard
+- coin detail page
+- mocked TDI data only
+- no live bot integration yet
+
+## Easiest Windows setup
+1. Install Node.js LTS if it is not already installed.
+2. Extract this zip to a normal folder.
+3. Open Command Prompt inside the extracted folder.
+4. Run:
+
+```cmd
+npm install
+npm run dev
+```
+
+5. Open the local address shown in the terminal. It will usually be:
+
+```text
+http://localhost:4173
+```
+
+## Route behavior
+This build uses hash routes, so after it loads you can also go directly to:
+- `#/login`
+- `#/dashboard`
+- `#/coin/LINK`
+- `#/coin/SOL`
+
+Example:
+
+```text
+http://localhost:4173/#/dashboard
+```
+
+## What to do next
+- confirm the look and layout
+- adjust wording and panels if needed
+- only after that, define the real snapshot API contract
+- keep the site observational and read-only in phase one

@@ -1,0 +1,862 @@
+import React, { useEffect, useMemo, useState } from 'react';
+
+type ViewMode = 'login' | 'dashboard' | 'detail';
+
+type ReplayRow = {
+  ts: string;
+  entryTdi: number;
+  ctx: string;
+  move4h: string;
+  note: string;
+};
+
+type StructureInfo = {
+  crest: string;
+  trough: string;
+  range: string;
+  note: string;
+};
+
+type ScannerRow = {
+  coin: string;
+  pair: string;
+  price: string;
+  tdi: number;
+  body: string;
+  change: string;
+  readiness: 'Ready' | 'Warming';
+  readinessTone: string;
+  ctxStack: string[];
+  traction: string;
+  qualifier: string;
+  components: {
+    liq: number;
+    tro: number;
+    prs: number;
+    spr: number;
+    mom: number;
+  };
+  tdiHistory: number[];
+  priceHistory: number[];
+  cycleScores: Array<[string, number]>;
+  structure: StructureInfo;
+  replay: ReplayRow[];
+};
+
+const STATS = [
+  { label: 'Signal Layer', value: 'TDI Factor' },
+  { label: 'Access', value: 'Secure Login' },
+  { label: 'Mode', value: 'Private Beta' },
+];
+
+const FEED_LINES = [
+  'LINK  TDI=68  liq=100 spr=99 prs=62  tro=79  ctx=1d^100 | 4h^93 | 6h^92',
+  'NEAR  TDI=66  liq=100 spr=96 prs=54  tro=74  ctx=1d^100 | 6h^94 | 1w^90',
+  'TAO   TDI=65  spr=94  prs=76 liq=73  tro=61  ctx=1d^100 | 1w^90 | 30mx69',
+  'ZRO   TDI=73  liq=100 spr=97 prs=97  tro=82  ctx=1w^80  | 1dx76 | 6hx74',
+  'SOL   TDI=79  prs=94 liq=88 spr=91  tro=72  ctx=4h^91  | 1h^84 | --',
+];
+
+const BODY_CARDS = [
+  {
+    title: 'Puddle',
+    text: 'Thin liquidity. Small mass creates oversized movement.',
+    tone: 'text-rose-300',
+  },
+  {
+    title: 'Pond',
+    text: 'Fast reaction zone. Context matters because the splash is easier to distort.',
+    tone: 'text-amber-300',
+  },
+  {
+    title: 'Lake',
+    text: 'Balanced depth. Cleaner cycle structure with more room for controlled moves.',
+    tone: 'text-cyan-300',
+  },
+  {
+    title: 'Ocean',
+    text: 'Deep liquidity. Broader mountain ranges, calmer reactions, heavier context weight.',
+    tone: 'text-emerald-300',
+  },
+];
+
+const SCANNER_ROWS: ScannerRow[] = [
+  {
+    coin: 'LINK',
+    pair: 'LINK-USD',
+    price: '$20.18',
+    tdi: 68,
+    body: 'Ocean',
+    change: '+5',
+    readiness: 'Ready',
+    readinessTone: 'text-emerald-300',
+    ctxStack: ['1d^100', '4h^93', '6h^92'],
+    traction: 'Liquidity-led',
+    qualifier: 'Trough aligned',
+    components: { liq: 100, tro: 79, prs: 62, spr: 99, mom: 58 },
+    tdiHistory: [44, 49, 53, 50, 58, 60, 63, 68, 71, 68],
+    priceHistory: [21.4, 21.1, 20.9, 20.4, 20.1, 19.9, 20.0, 20.08, 20.16, 20.18],
+    cycleScores: [['30M', 42], ['1H', 61], ['4H', 93], ['6H', 92], ['1D', 100], ['1W', 76]],
+    structure: {
+      crest: '$21.40',
+      trough: '$19.88',
+      range: '7.1%',
+      note: 'Current trough quality only makes sense because the 4H/6H/1D mountain range supports the 6.2% target.',
+    },
+    replay: [
+      { ts: '03/12 08:30', entryTdi: 71, ctx: '4H / 1D', move4h: '+2.4%', note: 'Liquidity held, trough qualified' },
+      { ts: '03/11 17:10', entryTdi: 66, ctx: '6H / 1D', move4h: '+1.1%', note: 'Broader structure supportive' },
+      { ts: '03/10 11:42', entryTdi: 58, ctx: '1H / 4H', move4h: '-0.6%', note: 'Trough weaker, traction carried' },
+    ],
+  },
+  {
+    coin: 'NEAR',
+    pair: 'NEAR-USD',
+    price: '$5.51',
+    tdi: 66,
+    body: 'Lake',
+    change: '+4',
+    readiness: 'Ready',
+    readinessTone: 'text-emerald-300',
+    ctxStack: ['1d^100', '6h^94', '1w^90'],
+    traction: 'Liquidity-led',
+    qualifier: 'Structure supportive',
+    components: { liq: 100, tro: 74, prs: 54, spr: 96, mom: 52 },
+    tdiHistory: [39, 45, 47, 51, 56, 60, 58, 63, 66, 66],
+    priceHistory: [5.86, 5.78, 5.72, 5.64, 5.59, 5.53, 5.48, 5.49, 5.5, 5.51],
+    cycleScores: [['30M', 31], ['1H', 57], ['4H', 72], ['6H', 94], ['1D', 100], ['1W', 90]],
+    structure: {
+      crest: '$5.86',
+      trough: '$5.48',
+      range: '6.5%',
+      note: 'This setup reads cleaner when the 1D structure leads and the shorter windows stay subordinate.',
+    },
+    replay: [
+      { ts: '03/12 05:12', entryTdi: 68, ctx: '6H / 1D', move4h: '+1.8%', note: 'Lake depth gave a cleaner path' },
+      { ts: '03/11 13:40', entryTdi: 61, ctx: '4H / 6H', move4h: '+0.9%', note: 'Trough supportive, not dominant' },
+      { ts: '03/09 20:08', entryTdi: 54, ctx: '1H / 4H', move4h: '-0.4%', note: 'Shorter cycle lacked full context' },
+    ],
+  },
+  {
+    coin: 'TAO',
+    pair: 'TAO-USD',
+    price: '$26.83',
+    tdi: 65,
+    body: 'Lake',
+    change: '+2',
+    readiness: 'Ready',
+    readinessTone: 'text-emerald-300',
+    ctxStack: ['1d^100', '1w^90', '30mx69'],
+    traction: 'Pressure-led',
+    qualifier: 'Mixed short interval',
+    components: { liq: 73, tro: 61, prs: 76, spr: 94, mom: 49 },
+    tdiHistory: [46, 48, 50, 55, 58, 63, 64, 62, 65, 65],
+    priceHistory: [28.2, 27.9, 27.6, 27.2, 27.0, 26.9, 26.7, 26.8, 26.82, 26.83],
+    cycleScores: [['30M', 69], ['1H', 52], ['4H', 49], ['6H', 58], ['1D', 100], ['1W', 90]],
+    structure: {
+      crest: '$28.20',
+      trough: '$26.70',
+      range: '5.3%',
+      note: 'Pressure is doing more of the work here. The product should say that clearly instead of pretending every setup is the same kind.',
+    },
+    replay: [
+      { ts: '03/12 09:44', entryTdi: 67, ctx: '1D / 1W', move4h: '+0.7%', note: 'Pressure carried, trough modest' },
+      { ts: '03/10 15:12', entryTdi: 59, ctx: '30M / 1D', move4h: '-0.2%', note: 'Mixed short interval' },
+      { ts: '03/09 07:26', entryTdi: 63, ctx: '1D / 1W', move4h: '+1.3%', note: 'Broader structure mattered more' },
+    ],
+  },
+  {
+    coin: 'ZRO',
+    pair: 'ZRO-USD',
+    price: '$3.64',
+    tdi: 73,
+    body: 'Pond',
+    change: '+9',
+    readiness: 'Ready',
+    readinessTone: 'text-emerald-300',
+    ctxStack: ['1w^80', '1dx76', '6hx74'],
+    traction: 'Liquidity-led',
+    qualifier: 'Trough active',
+    components: { liq: 100, tro: 82, prs: 97, spr: 97, mom: 66 },
+    tdiHistory: [41, 46, 52, 58, 61, 65, 70, 72, 74, 73],
+    priceHistory: [3.94, 3.86, 3.78, 3.71, 3.65, 3.6, 3.59, 3.62, 3.65, 3.64],
+    cycleScores: [['30M', 54], ['1H', 64], ['4H', 71], ['6H', 74], ['1D', 76], ['1W', 80]],
+    structure: {
+      crest: '$3.94',
+      trough: '$3.59',
+      range: '8.9%',
+      note: 'The pond profile moves faster, so replay and splash risk matter more on the product side.',
+    },
+    replay: [
+      { ts: '03/12 06:08', entryTdi: 74, ctx: '6H / 1D', move4h: '+3.2%', note: 'Pond depth, strong traction' },
+      { ts: '03/11 18:03', entryTdi: 69, ctx: '1D / 1W', move4h: '+1.9%', note: 'Trough active and visible' },
+      { ts: '03/10 09:18', entryTdi: 60, ctx: '1H / 6H', move4h: '+0.3%', note: 'Cleaner once higher context locked in' },
+    ],
+  },
+  {
+    coin: 'SOL',
+    pair: 'SOL-USD',
+    price: '$188.40',
+    tdi: 79,
+    body: 'Ocean',
+    change: '+11',
+    readiness: 'Warming',
+    readinessTone: 'text-amber-300',
+    ctxStack: ['4h^91', '1h^84', '--'],
+    traction: 'Pressure + liquidity',
+    qualifier: 'Higher ctx filling',
+    components: { liq: 88, tro: 72, prs: 94, spr: 91, mom: 76 },
+    tdiHistory: [48, 51, 55, 60, 66, 69, 73, 78, 81, 79],
+    priceHistory: [196.8, 194.6, 193.1, 191.0, 189.7, 188.9, 188.0, 188.3, 188.7, 188.4],
+    cycleScores: [['30M', 47], ['1H', 84], ['4H', 91], ['6H', 78], ['1D', 62], ['1W', 41]],
+    structure: {
+      crest: '$196.80',
+      trough: '$188.00',
+      range: '4.5%',
+      note: 'This is exactly where warm-up state matters. Context is filling, not frozen, so the product should show that honestly.',
+    },
+    replay: [
+      { ts: '03/12 10:11', entryTdi: 81, ctx: '1H / 4H', move4h: '+2.8%', note: 'Warming context, pressure-led' },
+      { ts: '03/11 21:37', entryTdi: 75, ctx: '1H / 4H', move4h: '+1.4%', note: 'Ocean depth softened the splash' },
+      { ts: '03/10 14:56', entryTdi: 62, ctx: '30M / 1H', move4h: '+0.2%', note: 'Not enough higher ctx yet' },
+    ],
+  },
+  {
+    coin: 'PUMP',
+    pair: 'PUMP-USD',
+    price: '$0.019',
+    tdi: 58,
+    body: 'Puddle',
+    change: '+14',
+    readiness: 'Warming',
+    readinessTone: 'text-amber-300',
+    ctxStack: ['30m^72', '5m^69', '--'],
+    traction: 'Volatility-led',
+    qualifier: 'Thin structure',
+    components: { liq: 61, tro: 55, prs: 70, spr: 81, mom: 63 },
+    tdiHistory: [36, 40, 43, 48, 56, 59, 61, 63, 60, 58],
+    priceHistory: [0.024, 0.0225, 0.0218, 0.021, 0.0204, 0.02, 0.0196, 0.0192, 0.0191, 0.019],
+    cycleScores: [['5M', 69], ['30M', 72], ['1H', 44], ['4H', 28], ['1D', 14], ['1W', 9]],
+    structure: {
+      crest: '$0.024',
+      trough: '$0.019',
+      range: '20.8%',
+      note: 'Perfect example of the puddle problem: a small amount of force creates a giant splash, so context and body type must stay visible.',
+    },
+    replay: [
+      { ts: '03/12 12:20', entryTdi: 61, ctx: '5M / 30M', move4h: '+4.6%', note: 'Huge splash risk' },
+      { ts: '03/11 09:05', entryTdi: 55, ctx: '30M / --', move4h: '-2.1%', note: 'Thin structure broke fast' },
+      { ts: '03/09 18:44', entryTdi: 58, ctx: '5M / 30M', move4h: '+1.9%', note: 'Good for story, not same as ocean logic' },
+    ],
+  },
+];
+
+function runDevChecks(rows: ScannerRow[]) {
+  console.assert(rows.length > 0, 'Expected at least one scanner row');
+  console.assert(rows.every((row) => row.tdiHistory.length === row.priceHistory.length), 'Expected matching sparkline lengths');
+  console.assert(rows.every((row) => row.replay.length > 0), 'Expected replay rows for every coin');
+}
+
+function parseHash(): { view: ViewMode; coin?: string } {
+  const hash = window.location.hash.replace(/^#/, '');
+
+  if (hash.startsWith('/coin/')) {
+    const coin = hash.split('/')[2]?.toUpperCase();
+    return { view: 'detail', coin };
+  }
+
+  if (hash === '/dashboard') {
+    return { view: 'dashboard' };
+  }
+
+  return { view: 'login' };
+}
+
+function setHash(view: ViewMode, coin = 'LINK') {
+  const next = view === 'detail' ? `/coin/${coin}` : view === 'dashboard' ? '/dashboard' : '/login';
+  window.location.hash = next;
+}
+
+function Sparkline({ data, color = '#22d3ee', height = 120 }: { data: number[]; color?: string; height?: number }) {
+  const width = 520;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = Math.max(1, max - min);
+
+  const points = data
+    .map((value, index) => {
+      const x = (index / Math.max(1, data.length - 1)) * width;
+      const y = height - ((value - min) / range) * (height - 16) - 8;
+      return `${x},${y}`;
+    })
+    .join(' ');
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-32 w-full" aria-hidden="true">
+      <polyline
+        fill="none"
+        stroke={color}
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={points}
+      />
+    </svg>
+  );
+}
+
+function MeterBar({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span className="text-slate-400">{label}</span>
+        <span className="font-medium text-slate-200">{value}</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+        <div className={`h-full rounded-full bg-gradient-to-r ${tone}`} style={{ width: `${value}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function AuthCard({ onEnter }: { onEnter: () => void }) {
+  return (
+    <div className="mx-auto w-full max-w-md">
+      <div className="rounded-[2rem] border border-slate-800 bg-slate-900/85 p-3 shadow-[0_30px_80px_rgba(2,12,27,0.65)] backdrop-blur-xl">
+        <div className="rounded-[1.6rem] border border-slate-800 bg-slate-950/90 p-8">
+          <div className="mb-8 flex items-start justify-between">
+            <div>
+              <div className="text-sm uppercase tracking-[0.2em] text-slate-500">Private Access</div>
+              <div className="mt-2 text-2xl font-semibold text-white">TDI Login</div>
+            </div>
+            <div className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-300">
+              Protected
+            </div>
+          </div>
+
+          <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">Email</label>
+              <input
+                type="email"
+                placeholder="name@tdifactor.io"
+                className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400/50 focus:bg-slate-900"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">Password</label>
+              <input
+                type="password"
+                placeholder="Enter password"
+                className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400/50 focus:bg-slate-900"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">Access Key</label>
+              <input
+                type="text"
+                placeholder="Private beta key"
+                className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400/50 focus:bg-slate-900"
+              />
+            </div>
+            <div className="flex items-center justify-between pt-1 text-sm">
+              <label className="flex items-center gap-2 text-slate-400">
+                <input type="checkbox" className="rounded border-slate-700 bg-slate-900" />
+                Remember this device
+              </label>
+              <button type="button" className="text-slate-400 transition hover:text-slate-200">
+                Request access
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={onEnter}
+              className="w-full rounded-2xl bg-cyan-400 px-5 py-3.5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:scale-[1.01] hover:shadow-cyan-400/30"
+            >
+              Enter Platform
+            </button>
+          </form>
+
+          <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-400">Session policy</span>
+              <span className="text-slate-200">Encrypted access</span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+              <div className="h-full w-[78%] rounded-full bg-gradient-to-r from-cyan-400 to-blue-500" />
+            </div>
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              Built for a restrained, high-trust first impression: private, deliberate, and stable.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Panel({
+  eyebrow,
+  title,
+  children,
+  badge,
+  className = '',
+}: {
+  eyebrow: string;
+  title: string;
+  children: React.ReactNode;
+  badge?: string;
+  className?: string;
+}) {
+  return (
+    <section className={`rounded-[2rem] border border-slate-800 bg-slate-900/80 p-5 backdrop-blur ${className}`}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm uppercase tracking-[0.2em] text-slate-500">{eyebrow}</div>
+          <div className="mt-1 text-2xl font-semibold text-white">{title}</div>
+        </div>
+        {badge ? <div className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-300">{badge}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function InfoChip({ label, value, tone = 'text-white', small = false }: { label: string; value: string | number; tone?: string; small?: boolean }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
+      <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</div>
+      <div className={`mt-1 ${small ? 'text-sm' : 'text-lg'} font-semibold ${tone}`}>{value}</div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, accent = 'text-white' }: { label: string; value: string | number; accent?: string }) {
+  return (
+    <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950 p-4">
+      <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</div>
+      <div className={`mt-2 text-2xl font-semibold ${accent}`}>{value}</div>
+    </div>
+  );
+}
+
+function ScoreBar({ label, value, active }: { label: string; value: number; active: boolean }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span className="text-slate-400">{label}</span>
+        <span className="text-slate-200">{value}</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+        <div
+          className={`h-full rounded-full ${active ? 'bg-gradient-to-r from-emerald-400 to-cyan-400' : 'bg-gradient-to-r from-slate-500 to-slate-400'}`}
+          style={{ width: `${value}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const initial = typeof window !== 'undefined' ? parseHash() : { view: 'login' as ViewMode };
+  const [view, setView] = useState<ViewMode>(initial.view);
+  const [selectedCoin, setSelectedCoin] = useState<string>(initial.coin && SCANNER_ROWS.some((row) => row.coin === initial.coin) ? initial.coin : 'LINK');
+
+  useEffect(() => {
+    runDevChecks(SCANNER_ROWS);
+    if (!window.location.hash) {
+      setHash('login');
+    }
+
+    const syncFromHash = () => {
+      const next = parseHash();
+      setView(next.view);
+      if (next.coin && SCANNER_ROWS.some((row) => row.coin === next.coin)) {
+        setSelectedCoin(next.coin);
+      }
+    };
+
+    syncFromHash();
+    window.addEventListener('hashchange', syncFromHash);
+    return () => window.removeEventListener('hashchange', syncFromHash);
+  }, []);
+
+  const selected = useMemo<ScannerRow>(() => {
+    return SCANNER_ROWS.find((row) => row.coin === selectedCoin) ?? SCANNER_ROWS[0];
+  }, [selectedCoin]);
+
+  const selectedDrivers = [
+    { label: 'Liquidity / traction', value: selected.components.liq, tone: 'from-emerald-400 to-cyan-400' },
+    { label: 'Trough / qualifier', value: selected.components.tro, tone: 'from-cyan-400 to-blue-500' },
+    { label: 'Pressure', value: selected.components.prs, tone: 'from-fuchsia-400 to-cyan-400' },
+    { label: 'Spread', value: selected.components.spr, tone: 'from-slate-300 to-slate-500' },
+    { label: 'Momentum', value: selected.components.mom, tone: 'from-blue-400 to-indigo-500' },
+  ];
+
+  const goLogin = () => setHash('login');
+  const goDashboard = (coin?: string) => {
+    if (coin) setSelectedCoin(coin);
+    setHash('dashboard');
+  };
+  const goDetail = (coin: string) => {
+    setSelectedCoin(coin);
+    setHash('detail', coin);
+  };
+
+  if (view === 'detail') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.08),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.08),transparent_32%)]" />
+        <div className="relative mx-auto max-w-7xl px-6 py-6">
+          <header className="mb-6 flex flex-col gap-4 rounded-[2rem] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_24px_60px_rgba(2,12,27,0.45)] backdrop-blur lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <button
+                onClick={() => goDashboard(selected.coin)}
+                className="mb-4 rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:bg-slate-900"
+              >
+                Back to Dashboard
+              </button>
+              <div className="text-sm uppercase tracking-[0.22em] text-cyan-300">Coin Detail</div>
+              <h1 className="mt-2 text-4xl font-bold text-white">{selected.coin} Intelligence View</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+                Detailed context for {selected.pair}: TDI history, TP-relative interval fit, crest-to-trough framing, and replay evidence built from bot-native snapshots.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <InfoChip label="Price" value={selected.price} />
+              <InfoChip label="TDI" value={selected.tdi} tone="text-cyan-300" />
+              <InfoChip label="Body" value={selected.body} />
+              <InfoChip label="Readiness" value={selected.readiness} tone={selected.readinessTone} />
+            </div>
+          </header>
+
+          <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+            <section className="space-y-6">
+              <Panel eyebrow="Historical Shape" title="TDI + Price History" badge="Snapshot-driven">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950 p-4">
+                    <div className="mb-2 text-sm font-medium text-slate-300">TDI history</div>
+                    <Sparkline data={selected.tdiHistory} color="#22d3ee" />
+                    <div className="mt-2 text-sm text-slate-400">TDI rising into the current decision environment.</div>
+                  </div>
+                  <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950 p-4">
+                    <div className="mb-2 text-sm font-medium text-slate-300">Price structure</div>
+                    <Sparkline data={selected.priceHistory} color="#60a5fa" />
+                    <div className="mt-2 text-sm text-slate-400">Price path used to frame crest-to-trough context for the target move.</div>
+                  </div>
+                </div>
+              </Panel>
+
+              <Panel eyebrow="Structure Framing" title="Crest → Trough Context" badge="TP-relative logic">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <MiniStat label="Crest" value={selected.structure.crest} />
+                  <MiniStat label="Trough" value={selected.structure.trough} />
+                  <MiniStat label="Range" value={selected.structure.range} />
+                </div>
+                <div className="mt-4 rounded-[1.5rem] border border-slate-800 bg-slate-950 p-4 text-sm leading-7 text-slate-400">
+                  {selected.structure.note}
+                </div>
+              </Panel>
+            </section>
+
+            <section className="space-y-6">
+              <Panel eyebrow="Context Stack" title="Interval Confidence">
+                <div className="mt-4 flex flex-wrap gap-3">
+                  {selected.ctxStack.map((token) => (
+                    <div key={token} className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 font-mono text-sm text-cyan-300">
+                      {token}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm leading-6 text-slate-400">
+                  The stack is intentionally layered. This product shows context depth with memory instead of forcing one frozen interval to pretend it explains everything.
+                </div>
+              </Panel>
+
+              <Panel eyebrow="TP-Relative Fit" title="Interval Alignment">
+                <div className="mt-5 space-y-4">
+                  {selected.cycleScores.map(([windowLabel, value]) => {
+                    const isActive = selected.ctxStack.some((token) => token.toLowerCase().startsWith(windowLabel.toLowerCase()));
+                    return <ScoreBar key={windowLabel} label={windowLabel} value={value} active={isActive} />;
+                  })}
+                </div>
+              </Panel>
+
+              <Panel eyebrow="Driver Mix" title="Traction Hierarchy">
+                <div className="mt-5 space-y-3">
+                  {selectedDrivers.map((driver) => (
+                    <MeterBar key={driver.label} label={driver.label} value={driver.value} tone={driver.tone} />
+                  ))}
+                </div>
+                <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm leading-6 text-slate-400">
+                  <span className="text-slate-200">Current read:</span> {selected.traction} with {selected.qualifier.toLowerCase()}. This is an intelligence view built for decision quality, not an execution command panel.
+                </div>
+              </Panel>
+            </section>
+          </div>
+
+          <Panel eyebrow="Replay Layer" title="Decision Replay" badge="Evidence, not hype" className="mt-6">
+            <div className="overflow-hidden rounded-[1.5rem] border border-slate-800">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-950 text-slate-400">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Timestamp</th>
+                    <th className="px-4 py-3 font-medium">Entry TDI</th>
+                    <th className="px-4 py-3 font-medium">Context</th>
+                    <th className="px-4 py-3 font-medium">4H Move</th>
+                    <th className="px-4 py-3 font-medium">Replay Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selected.replay.map((item) => (
+                    <tr key={item.ts} className="border-t border-slate-800 bg-slate-950/40">
+                      <td className="px-4 py-3 text-slate-300">{item.ts}</td>
+                      <td className="px-4 py-3 font-semibold text-cyan-300">{item.entryTdi}</td>
+                      <td className="px-4 py-3 text-slate-300">{item.ctx}</td>
+                      <td className={`px-4 py-3 font-medium ${item.move4h.startsWith('+') ? 'text-emerald-300' : 'text-rose-300'}`}>
+                        {item.move4h}
+                      </td>
+                      <td className="px-4 py-3 text-slate-400">{item.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'dashboard') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.08),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.08),transparent_32%)]" />
+        <div className="relative mx-auto max-w-7xl px-6 py-6">
+          <header className="mb-6 flex flex-col gap-4 rounded-[2rem] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_24px_60px_rgba(2,12,27,0.45)] backdrop-blur lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-sm uppercase tracking-[0.22em] text-cyan-300">Trade Decision Intelligence</div>
+              <h1 className="mt-2 text-3xl font-bold text-white">TDI Factor Dashboard</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+                Scanner-first intelligence console built from bot-native diagnostics: liquidity-led traction, trough as context qualifier, and dynamic context stacks aligned to TP-relative structure.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <InfoChip label="Session" value="Private Beta" small />
+              <InfoChip label="Layer" value="Observational" small />
+              <button
+                onClick={goLogin}
+                className="rounded-2xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-300 transition hover:border-slate-500 hover:bg-slate-900"
+              >
+                Back to Login
+              </button>
+            </div>
+          </header>
+
+          <div className="grid gap-6 lg:grid-cols-[1.18fr_0.82fr]">
+            <Panel eyebrow="Main View" title="TDI Market Scanner" badge="Live observational layer">
+              <div className="overflow-hidden rounded-[1.5rem] border border-slate-800">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-950 text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Coin</th>
+                      <th className="px-4 py-3 font-medium">TDI</th>
+                      <th className="px-4 py-3 font-medium">Ctx Stack</th>
+                      <th className="px-4 py-3 font-medium">Readiness</th>
+                      <th className="px-4 py-3 font-medium">Body</th>
+                      <th className="px-4 py-3 font-medium">Traction</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {SCANNER_ROWS.map((row) => (
+                      <tr
+                        key={row.coin}
+                        onClick={() => setSelectedCoin(row.coin)}
+                        className={`cursor-pointer border-t border-slate-800 transition ${selected.coin === row.coin ? 'bg-cyan-400/6' : 'bg-slate-950/40 hover:bg-slate-900'}`}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-white">{row.coin}</div>
+                          <div className="text-xs text-slate-500">{row.pair} • {row.price}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-cyan-300">{row.tdi}</div>
+                          <div className="text-xs text-emerald-300">{row.change}</div>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-300">{row.ctxStack.join(' | ')}</td>
+                        <td className={`px-4 py-3 text-xs font-medium ${row.readinessTone}`}>{row.readiness}</td>
+                        <td className="px-4 py-3 text-slate-300">{row.body}</td>
+                        <td className="px-4 py-3 text-slate-400">{row.traction}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+
+            <section className="space-y-6">
+              <Panel eyebrow="Selected Coin" title={selected.coin}>
+                <div className="mt-2 flex items-end justify-between gap-4">
+                  <div>
+                    <div className="text-slate-400">{selected.pair}</div>
+                    <div className="mt-1 text-3xl font-bold text-white">{selected.price}</div>
+                  </div>
+                  <div className={`rounded-full border px-3 py-1 text-xs font-medium ${selected.readiness === 'Ready' ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300' : 'border-amber-400/25 bg-amber-400/10 text-amber-300'}`}>
+                    {selected.readiness}
+                  </div>
+                </div>
+                <div className="mt-5 space-y-3 text-sm text-slate-300">
+                  <div>TDI Factor: <span className="font-semibold text-cyan-300">{selected.tdi}</span></div>
+                  <div>Traction: <span className="font-semibold text-white">{selected.traction}</span></div>
+                  <div>Qualifier: <span className="font-semibold text-white">{selected.qualifier}</span></div>
+                  <div>Body: <span className="font-semibold text-white">{selected.body}</span></div>
+                  <div className="font-mono text-xs text-slate-300">{selected.ctxStack.join(' | ')}</div>
+                </div>
+                <button
+                  onClick={() => goDetail(selected.coin)}
+                  className="mt-4 w-full rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:scale-[1.01]"
+                >
+                  Open Coin Detail
+                </button>
+              </Panel>
+            </section>
+          </div>
+
+          <div className="mt-6 grid gap-6 xl:grid-cols-[0.95fr_1.05fr_1fr]">
+            <Panel eyebrow="Market Bodies" title="Depth Classification">
+              <div className="mt-5 grid gap-3">
+                {BODY_CARDS.map((card) => (
+                  <div key={card.title} className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+                    <div className={`text-lg font-semibold ${card.tone}`}>{card.title}</div>
+                    <div className="mt-2 text-sm leading-6 text-slate-400">{card.text}</div>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+
+            <Panel eyebrow="Cycle Window" title="TP-Relative Context">
+              <div className="mt-5 rounded-[1.5rem] border border-slate-800 bg-slate-950 p-5">
+                <div className="mb-4 flex items-center justify-between text-sm">
+                  <span className="text-slate-400">Desired TP target</span>
+                  <span className="font-semibold text-white">6.2%</span>
+                </div>
+                <div className="space-y-4">
+                  {selected.cycleScores.map(([windowLabel, value]) => {
+                    const isActive = selected.ctxStack.some((token) => token.toLowerCase().startsWith(windowLabel.toLowerCase()));
+                    return <ScoreBar key={windowLabel} label={windowLabel} value={value} active={isActive} />;
+                  })}
+                </div>
+                <p className="mt-4 text-sm leading-6 text-slate-400">
+                  A trough only matters relative to the mountain range that matches the intended move. The product should show interval context, not pretend there is one universal best cycle.
+                </p>
+              </div>
+            </Panel>
+
+            <Panel eyebrow="Live Feed" title="Signal Tape">
+              <div className="mt-5 rounded-[1.5rem] border border-slate-800 bg-slate-950 p-4 font-mono text-sm leading-7 text-slate-300">
+                {FEED_LINES.map((line, index) => (
+                  <div key={index} className="border-b border-slate-900 py-2 last:border-none">
+                    {line}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm leading-6 text-slate-400">
+                Built from bot-native diagnostics: ticker → snapshots → validation → replay → product. No P&amp;L panel here until balance-anchored reporting is trustworthy.
+              </div>
+            </Panel>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.1),transparent_32%)]" />
+      <div className="relative mx-auto max-w-7xl px-6 py-8">
+        <header className="mb-8 flex flex-col gap-4 rounded-[2rem] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_24px_60px_rgba(2,12,27,0.45)] backdrop-blur lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="text-sm uppercase tracking-[0.22em] text-cyan-300">Trade Decision Intelligence</div>
+            <h1 className="mt-2 text-3xl font-bold text-white">TDI Factor Private Beta</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+              Scanner-first market intelligence shaped by bot-native diagnostics: liquidity-led traction, trough as a qualifier,
+              dynamic context stacks, replay evidence, and TP-relative structure.
+            </p>
+          </div>
+          <div className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-xs font-medium uppercase tracking-[0.18em] text-emerald-300">
+            Secure private access
+          </div>
+        </header>
+
+        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+          <section className="space-y-6">
+            <Panel eyebrow="Entry View" title="Context-aware intelligence, not black-box execution.">
+              <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-400">
+                This first version is intentionally restrained: a secure front door, a scanner-first dashboard, and a coin detail
+                view that explains the decision environment without pretending to be the execution engine.
+              </p>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                {STATS.map((stat) => (
+                  <div key={stat.label} className="rounded-[1.5rem] border border-slate-800 bg-slate-950 p-4">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{stat.label}</div>
+                    <div className="mt-2 text-lg font-semibold text-white">{stat.value}</div>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-[1.75rem] border border-slate-800 bg-slate-900/80 p-5 backdrop-blur">
+                <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">Scanner</div>
+                <div className="mt-2 text-xl font-semibold text-white">Market view first</div>
+                <p className="mt-3 text-sm leading-6 text-slate-400">
+                  Rank coins by TDI Factor, show readiness, keep the interval stack visible, and frame traction honestly.
+                </p>
+              </div>
+              <div className="rounded-[1.75rem] border border-slate-800 bg-slate-900/80 p-5 backdrop-blur">
+                <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">Context</div>
+                <div className="mt-2 text-xl font-semibold text-white">TP-relative structure</div>
+                <p className="mt-3 text-sm leading-6 text-slate-400">
+                  A trough only matters relative to the mountain range that matches the intended move. The product keeps that visible.
+                </p>
+              </div>
+              <div className="rounded-[1.75rem] border border-slate-800 bg-slate-900/80 p-5 backdrop-blur">
+                <div className="text-sm uppercase tracking-[0.18em] text-cyan-300">Replay</div>
+                <div className="mt-2 text-xl font-semibold text-white">Evidence over hype</div>
+                <p className="mt-3 text-sm leading-6 text-slate-400">
+                  Snapshot-driven replay turns past decision environments into readable proof instead of decorative marketing.
+                </p>
+              </div>
+            </div>
+
+            <Panel eyebrow="Signal framing" title="What the product is actually saying">
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950 p-4">
+                  <div className="text-sm font-semibold text-white">Liquidity leads</div>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">
+                    Traction is not presented as one mystical score. The hierarchy stays visible so users can see what is doing the work.
+                  </p>
+                </div>
+                <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950 p-4">
+                  <div className="text-sm font-semibold text-white">Trough qualifies</div>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">
+                    Trough remains important, but it is contextual. The UI avoids overstating it as a universal lead signal.
+                  </p>
+                </div>
+              </div>
+            </Panel>
+          </section>
+
+          <section className="lg:sticky lg:top-8">
+            <AuthCard
+              onEnter={() => {
+                setSelectedCoin('LINK');
+                goDashboard('LINK');
+              }}
+            />
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
