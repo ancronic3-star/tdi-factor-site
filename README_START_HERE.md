@@ -1,4 +1,3 @@
-node_modules
-dist
-.env
-.env.local
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_key_here
+VITE_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/
+VITE_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/

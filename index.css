@@ -1,1 +1,17 @@
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_replace_me
+# TDI Factor - no-edit clean repo pack
+
+This pack is for a fresh upload. Do not mix it into the old broken repo.
+
+## Use this exact flow
+
+1. Create a brand new private GitHub repo.
+2. Extract this zip on your computer.
+3. Upload every extracted file into that new empty repo.
+4. Import that repo into Vercel.
+5. Add the Vercel environment variable:
+   - Name: `VITE_CLERK_PUBLISHABLE_KEY`
+   - Value: your Clerk publishable key
+6. Deploy.
+
+Do not upload the zip file itself.
+Upload the extracted files.
